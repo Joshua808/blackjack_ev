@@ -83,7 +83,7 @@ function dealerOutcomeProbs(upcard: Rank, shoeStart: Shoe, rules: Rules): Record
     if (memo.has(key)) return memo.get(key)!;
 
     // natural 21\n
-    if (cards.length === 2 && t.best === 21) { const out = {\"21\":1} as Record<string, number>; memo.set(key, out); return out; }
+    if (cards.length === 2 && t.best === 21) { const out = {"21":1} as Record<string, number>; memo.set(key, out); return out; }
     const shouldStand = () => {
       if (t.best > 21) return false;
       if (t.isSoft) { if (t.best > 17) return true; if (t.best === 17) return !rules.dealerHitsSoft17; return false; }
