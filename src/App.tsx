@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from "react";
-import App from './App'
 
 /** ---------- Types & constants ---------- */
 type Rank = "A" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "J" | "Q" | "K";
@@ -14,11 +13,11 @@ function rankValue(r: Rank): number {
 type Rules = {
   decks: number;
   dealerHitsSoft17: boolean;         // H17 (true) / S17 (false)
-  blackjackPays: 1.5 | 1.2;          // 3:2 or 6:5 (if you want to test)
+  blackjackPays: 1.5 | 1.2;          // 3:2 or 6:5
   lateSurrender: boolean;
   doubleAllowed: boolean;
   doubleAfterSplit: boolean;
-  resplitPairs: number;               // number of times you can resplit (e.g., 3)
+  resplitPairs: number;               // e.g., 3
   splitAcesOneCardOnly: boolean;
   resplitAces: boolean;
 };
@@ -40,10 +39,7 @@ type Hand = Rank[];
 /** ---------- Hand utilities ---------- */
 function handTotals(cards: Hand): { hard: number; soft: number | null; isSoft: boolean; best: number } {
   let total = 0; let aces = 0;
-  for (const r of cards) {
-    if (r === "A") aces++;
-    else total += rankValue(r);
-  }
+  for (const r of cards) { if (r === "A") aces++; else total += rankValue(r); }
   let best = total;
   for (let i = 0; i < aces; i++) {
     // try to place 11 without bust; remaining aces count as 1
@@ -55,9 +51,7 @@ function handTotals(cards: Hand): { hard: number; soft: number | null; isSoft: b
   const soft = isSoft ? best : null;
   return { hard, soft, isSoft, best: isSoft ? best : hard };
 }
-function isBlackjack(cards: Hand): boolean {
-  return cards.length === 2 && handTotals(cards).best === 21 && cards.includes("A");
-}
+function isBlackjack(cards: Hand): boolean { return cards.length === 2 && handTotals(cards).best === 21 && cards.includes("A"); }
 function isBust(cards: Hand): boolean { return handTotals(cards).best > 21; }
 function normalizeRank(r: Rank): string { return r === "J" || r === "Q" || r === "K" ? "10" : r; }
 function canSplit(cards: Hand): boolean { return cards.length === 2 && normalizeRank(cards[0]) === normalizeRank(cards[1]); }
@@ -67,7 +61,7 @@ type Shoe = Record<Rank, number>;
 
 function makeFullShoe(decks: number): Shoe {
   const s: Shoe = { A:0, "2":0, "3":0, "4":0, "5":0, "6":0, "7":0, "8":0, "9":0, "10":0, J:0, Q:0, K:0 };
-  for (const r of RANKS) s[r] = 4 * decks; // 4 of each rank per deck
+  for (const r of RANKS) s[r] = 4 * decks;
   return s;
 }
 function shoeTotal(s: Shoe): number { let t = 0; for (const r of RANKS) t += s[r]; return t; }
@@ -75,10 +69,10 @@ function draw(s: Shoe, r: Rank){ s[r]--; }
 function undraw(s: Shoe, r: Rank){ s[r]++; }
 function shoeKey(s: Shoe): string { return RANKS.map(r=>s[r]).join(","); }
 
-function initShoe(decks: number, player: Hand, dealerUp: Rank): Shoe {
+function initShoeMulti(decks: number, hands: Hand[], dealerUp: Rank): Shoe {
   const s = makeFullShoe(decks);
   const remove = (r: Rank) => { if (s[r] > 0) s[r]--; };
-  for (const r of player) remove(r);
+  for (const h of hands) for (const r of h) remove(r);
   remove(dealerUp);
   return s;
 }
@@ -388,21 +382,11 @@ const CardPicker: React.FC<{ label: string; cards: Hand; setCards: (h: Hand) => 
           >
             {RANKS.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
-          <button
-            className="text-xs text-gray-600 underline"
-            onClick={() => setCards(cards.filter((_, idx) => idx !== i))}
-          >
-            remove
-          </button>
+          <button className="text-xs text-gray-600 underline" onClick={() => setCards(cards.filter((_, idx) => idx !== i))}>remove</button>
         </div>
       ))}
       {cards.length < maxCards && (
-        <button
-          className="border rounded-xl px-3 py-2 text-sm"
-          onClick={() => setCards([...cards, "A"])}
-        >
-          + Add card
-        </button>
+        <button className="border rounded-xl px-3 py-2 text-sm" onClick={() => setCards([...cards, "A"])}>+ Add card</button>
       )}
     </div>
   </div>
@@ -432,7 +416,7 @@ const NumberInput: React.FC<{label:string; value:number; onChange:(n:number)=>vo
   </label>
 );
 
-/** ---------- Helpers for table ---------- */
+/** ---------- Helpers ---------- */
 function formatEV(ev: number | undefined): string {
   if (ev === undefined || !isFinite(ev)) return "—";
   return (ev >= 0 ? "+" : "") + ev.toFixed(4);
@@ -443,99 +427,138 @@ function bestMoveFrom(evs: Record<string, number>): { move: string; ev: number }
   return { move: bestM, ev: bestV };
 }
 
-/** ---------- App ---------- */
+/** ---------- App (multiple hands) ---------- */
 export default function App() {
-  const [player, setPlayer] = useState<Hand>(["A","7"]);
+  const [hands, setHands] = useState<Hand[]>([
+    ["A","7"],
+  ]);
   const [dealerUp, setDealerUp] = useState<Rank>("6");
   const [rules, setRules] = useState<Rules>({ ...DEFAULT_RULES });
 
-  const canSplitFlag = useMemo(() => canSplit(player), [player]);
+  // One finite shoe with ALL shown cards removed (every hand + dealer upcard)
+  const baseShoe = useMemo(() => initShoeMulti(rules.decks, hands, dealerUp), [rules.decks, hands, dealerUp]);
 
-  const ctx: PlayerContext = useMemo(() => ({
-    rules,
-    upcard: dealerUp,
-    canDouble: player.length === 2,
-    canSplit: canSplitFlag,
-    splitDepth: 0,
-    isSplitAces: false,
-    doubleAfterSplit: rules.doubleAfterSplit
-  }), [rules, dealerUp, canSplitFlag, player.length]);
+  // Per-hand contexts & EVs
+  const perHand = useMemo(() => {
+    return hands.map((hand) => {
+      const ctx: PlayerContext = {
+        rules,
+        upcard: dealerUp,
+        canDouble: hand.length === 2,
+        canSplit: canSplit(hand),
+        splitDepth: 0,
+        isSplitAces: false,
+        doubleAfterSplit: rules.doubleAfterSplit,
+      };
+      const evs = actionEVsFinite(hand, ctx, baseShoe);
+      const best = bestMoveFrom(evs);
+      const totals = handTotals(hand);
+      return { evs, best, totals, ctx };
+    });
+  }, [hands, rules, dealerUp, baseShoe]);
 
-  const baseShoe = useMemo(() => initShoe(rules.decks, player, dealerUp), [rules.decks, player, dealerUp]);
-  const evs = useMemo(() => actionEVsFinite(player, ctx, baseShoe), [player, ctx, baseShoe]);
-  const best = useMemo(() => bestMoveFrom(evs), [evs]);
-  const pt = handTotals(player);
+  const addHand = () => setHands([...hands, ["A","7"]]);
+  const removeHand = (idx: number) => setHands(hands.filter((_, i) => i !== idx));
+  const setHandAt = (idx: number, newHand: Hand) => {
+    const next = [...hands]; next[idx] = newHand; setHands(next);
+  };
+
+  // Total EV across all hands (sum of each hand's best EV)
+  const totalEV = perHand.reduce((s, h) => s + h.best.ev, 0);
 
   return (
     <div className="min-h-screen w-full bg-gray-50">
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        <h1 className="text-2xl font-semibold mb-2">PA Blackjack EV Helper — Finite Decks</h1>
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <h1 className="text-2xl font-semibold mb-2">Blackjack EV Helper — Multiple Hands</h1>
         <p className="text-sm text-gray-700 mb-6">
-          Deck-aware EV calculation (1–8 decks). Add/remove cards, toggle rules, and see the optimal move.
+          Evaluate several hands at once. EVs use a finite shoe with all shown cards removed.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-2">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-2xl shadow p-4">
-                <CardPicker label="Player Cards" cards={player} setCards={setPlayer} maxCards={10} />
-                <div className="mt-3 text-xs text-gray-600">
-                  Total: <b>{pt.best}</b> {pt.isSoft ? "(soft)" : "(hard)"} {isBlackjack(player) && <span className="ml-1">• Blackjack</span>}
-                </div>
-                <div className="mt-3 text-xs text-gray-600">Pair: {canSplitFlag ? <b>Yes</b> : "No"}</div>
-              </div>
+          {/* Left: hands + per-hand results */}
+          <div className="md:col-span-2 flex flex-col gap-6">
+            {hands.map((hand, idx) => {
+              const info = perHand[idx];
+              return (
+                <div key={idx} className="bg-white rounded-2xl shadow p-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold">Hand {idx + 1}</h2>
+                    <button
+                      className="text-xs text-red-600 underline"
+                      onClick={() => removeHand(idx)}
+                      disabled={hands.length === 1}
+                      title={hands.length === 1 ? "Keep at least one hand" : "Remove this hand"}
+                    >
+                      remove hand
+                    </button>
+                  </div>
 
-              <div className="bg-white rounded-2xl shadow p-4">
-                <div className="text-sm font-medium mb-2">Dealer Upcard</div>
-                <select
-                  className="border rounded-xl px-3 py-2 text-sm"
-                  value={dealerUp}
-                  onChange={e => setDealerUp(e.target.value as Rank)}
-                >
-                  {RANKS.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-                <div className="mt-4 text-xs text-gray-600 leading-relaxed">
-                  <p className="mb-2">
-                    Finite-shoe recursion with memoization keyed by hand state and remaining-card composition.
-                  </p>
-                </div>
-              </div>
-            </div>
+                  <div className="mt-3">
+                    <CardPicker
+                      label="Player Cards"
+                      cards={hand}
+                      setCards={(h) => setHandAt(idx, h)}
+                      maxCards={10}
+                    />
+                    <div className="mt-3 text-xs text-gray-600">
+                      Total: <b>{info.totals.best}</b> {info.totals.isSoft ? "(soft)" : "(hard)"} {isBlackjack(hand) && <span className="ml-1">• Blackjack</span>}
+                    </div>
+                    <div className="mt-3 text-xs text-gray-600">Pair: {canSplit(hand) ? <b>Yes</b> : "No"}</div>
+                  </div>
 
-            <div className="mt-6 bg-white rounded-2xl shadow p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-semibold">Results</h2>
-                <div className="text-sm text-gray-600">
-                  Best Move: <span className="font-semibold">{best.move}</span>
-                  <span className="ml-2">EV: <span className={best.ev >= 0 ? "text-green-600" : "text-red-600"}>{formatEV(best.ev)}</span></span>
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm font-medium">Best Move</div>
+                      <div className="text-sm">
+                        <span className="font-semibold">{info.best.move}</span>
+                        <span className="ml-2">EV: <span className={info.best.ev>=0?"text-green-600":"text-red-600"}>{formatEV(info.best.ev)}</span></span>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left border-b"><th className="py-2 pr-4">Action</th><th className="py-2">EV</th></tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(info.evs).sort((a,b)=>b[1]-a[1]).map(([k,v])=> (
+                            <tr key={k} className="border-b last:border-b-0">
+                              <td className="py-2 pr-4">{k}</td>
+                              <td className="py-2 font-mono">{formatEV(v)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left border-b"><th className="py-2 pr-4">Action</th><th className="py-2">EV</th></tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(evs).sort((a,b)=>b[1]-a[1]).map(([k,v])=> (
-                      <tr key={k} className="border-b last:border-b-0">
-                        <td className="py-2 pr-4">{k}</td>
-                        <td className="py-2 font-mono">{formatEV(v)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+              );
+            })}
+
+            <button className="border rounded-xl px-3 py-2 text-sm bg-white shadow" onClick={addHand}>
+              + Add another hand
+            </button>
           </div>
 
+          {/* Right: dealer + rules + aggregate */}
           <div className="bg-white rounded-2xl shadow p-4 h-fit">
-            <h2 className="text-lg font-semibold mb-2">Rules</h2>
+            <div className="mb-4">
+              <div className="text-sm font-medium mb-2">Dealer Upcard</div>
+              <select
+                className="border rounded-xl px-3 py-2 text-sm"
+                value={dealerUp}
+                onChange={e=>setDealerUp(e.target.value as Rank)}
+              >
+                {RANKS.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+
+            <h3 className="text-base font-semibold mb-2">Rules</h3>
             <label className="flex items-center justify-between gap-4 py-2">
               <span className="text-sm">Decks</span>
               <select
                 className="border rounded px-2 py-1"
                 value={rules.decks}
-                onChange={e=>setRules({ ...rules, decks: parseInt(e.target.value, 10) as number })}
+                onChange={e=>setRules({ ...rules, decks: parseInt(e.target.value,10) as number })}
               >
                 {[1,2,3,4,5,6,7,8].map(n=> <option key={n} value={n}>{n}</option>)}
               </select>
@@ -548,14 +571,16 @@ export default function App() {
             <Toggle label="Split Aces: one card only" checked={rules.splitAcesOneCardOnly} onChange={v=>setRules({ ...rules, splitAcesOneCardOnly: v })} />
             <Toggle label="Allow resplit Aces" checked={rules.resplitAces} onChange={v=>setRules({ ...rules, resplitAces: v })} />
 
-            <div className="mt-4 text-xs text-gray-600">
-              <p><b>Note:</b> Finite-shoe EVs can be slower with very large hands. If it lags, try fewer added cards or more decks.</p>
+            <div className="mt-4 p-3 rounded-lg bg-gray-50 text-sm">
+              <div className="font-medium mb-1">Summary</div>
+              <div>Hands: {hands.length}</div>
+              <div>Sum of all EVs: <span className={totalEV>=0?"text-green-600":"text-red-600"}>{formatEV(totalEV)}</span></div>
             </div>
           </div>
         </div>
 
         <div className="mt-8 text-center text-xs text-gray-500">
-          © {new Date().getFullYear()} Blackjack EV Helper • Finite deck engine.
+          © {new Date().getFullYear()} Blackjack EV Helper • Finite deck engine, multi-hand.
         </div>
       </div>
     </div>
