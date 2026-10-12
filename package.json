@@ -1,12 +1,13 @@
 {
-  "name": "blackjack-ev-finite",
+  "name": "blackjack-ev",
   "private": true,
-  "version": "2.0.2",
+  "version": "3.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview --port 4173"
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173",
+    "fetch-data": "node scripts/fetch-woo.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
