@@ -118,7 +118,8 @@ export default function App() {
   }), [hands, up, rules, ready]);
 
   const totalBet = hands.reduce((s, h) => s + h.bet, 0);
-  const totalEV = perHand.reduce((s, p, i) => s + (p.best ? p.best.ev * hands[i].bet : 0), 0);
+  const sumEV = perHand.reduce((s, p, i) => s + (p.best ? p.best.ev * hands[i].bet : 0), 0);
+  const totalEV = totalBet ? sumEV / totalBet : 0; // bet-weighted average EV per hand
   const houseEV = ready ? gameEV(ready, rules) : null;
   const stated = ready ? statedGameEV(ready, rules) : null;
   const peeks = up === "A" || up === "10";
@@ -186,10 +187,10 @@ export default function App() {
             <dl className="stats">
               <dt>Hands</dt><dd>{hands.length}</dd>
               <dt>Total bet</dt><dd>{+totalBet.toFixed(2)}</dd>
-              <dt>Total EV (sum)</dt><dd className={sign(totalEV)}>{fmt(totalEV)}</dd>
-              <dt>EV per unit bet</dt><dd className={sign(totalEV)}>{fmt(totalBet ? totalEV / totalBet : 0)}</dd>
+              <dt>Total EV (average)</dt><dd className={sign(totalEV)}>{fmt(totalEV)}</dd>
+              <dt>Expected profit</dt><dd className={sign(sumEV)}>{fmt(sumEV)}</dd>
             </dl>
-            <p className="fine">The sum is your expected profit for the round, in bet units. EV per unit bet is that sum divided by the total bet, a weighted average across your hands. With one hand at bet 1 they are the same.</p>
+            <p className="fine">Total EV is the average EV per hand, weighted by bet (with every bet at 1 it is a plain average). Expected profit is the sum across hands, in bet units.</p>
           </section>
 
           <section className="panel">

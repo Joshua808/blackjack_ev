@@ -10,8 +10,8 @@ action (stand, hit, double, split, surrender) plus the best play. EVs come strai
   late surrender on/off; blackjack pays 3:2 or 6:5. Fixed by the tables: double on any two cards,
   resplit to 4 hands (not aces), one card to split aces.
 - **Dealer A or 10 up:** EVs assume the dealer has peeked and doesn't have blackjack.
-- **Multiple hands:** each hand is looked up independently. "Total EV" is the bet-weighted sum (expected
-  profit for the round); "EV per unit bet" is that sum divided by the total bet. The tables assume a full
+- **Multiple hands:** each hand is looked up independently. "Total EV" is the bet-weighted average EV per hand;
+  "Expected profit" is the bet-weighted sum for the round. The tables assume a full
   shoe, so cards in your other hands aren't removed (a small effect at 6–8 decks).
 - **Game EV:** sum over every starting hand of probability × EV of the best play, plus dealer-blackjack
   rounds. For rules Wizard of Odds lists, it matches their published figure.
